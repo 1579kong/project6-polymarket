@@ -22,10 +22,18 @@ def append_csv(path: Path, df: pd.DataFrame) -> None:
     if df.empty:
         return
     ensure_parent(path)
-    if path.exists():
+
+    if path.exists() and path.stat().st_size > 0:
         old = pd.read_csv(path)
         df = pd.concat([old, df], ignore_index=True)
+
+    # minute 단위 정규화 + 중복 제거
+    df["snapshot_time_utc"] = pd.to_datetime(df["snapshot_time_utc"], utc=True).dt.floor("min")
+    df = df.drop_duplicates(subset=["market_id", "snapshot_time_utc"], keep="last")
+    df = df.sort_values(["snapshot_time_utc", "market_id"])
+
     df.to_csv(path, index=False)
+
 
 
 def _event_is_still_open(event_id: str) -> bool:
@@ -87,7 +95,7 @@ def save_watchlist_and_mapping(watchlist: pd.DataFrame) -> None:
 
 def build_snapshot(watchlist: pd.DataFrame, run_id: str) -> pd.DataFrame:
     rows = []
-    ts = now_utc()
+    ts = now_utc().replace(second=0, microsecond=0)
     phase = market_phase_from_utc(ts)
 
     for rec in watchlist.to_dict("records"):
@@ -168,6 +176,7 @@ def main() -> None:
     parser.add_argument("--dynamic-stock-n", type=int, default=2)
     parser.add_argument("--dynamic-crypto-n", type=int, default=1)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--lookback-minutes", type=int, default=12)
     args = parser.parse_args()
 
     if args.once:
