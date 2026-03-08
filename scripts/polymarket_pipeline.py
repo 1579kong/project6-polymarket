@@ -18,6 +18,7 @@ WATCHLIST_CSV = DATA_DIR / "watchlist_current.csv"
 MAPPING_CSV = DATA_DIR / "market_mapping.csv"
 
 
+# 1) append_csv 교체
 def append_csv(path: Path, df: pd.DataFrame) -> None:
     if df.empty:
         return
@@ -27,15 +28,12 @@ def append_csv(path: Path, df: pd.DataFrame) -> None:
         old = pd.read_csv(path)
         df = pd.concat([old, df], ignore_index=True)
 
-    # mixed ISO8601 안전 파싱
     ts = pd.to_datetime(df["snapshot_time_utc"], utc=True, format="mixed", errors="coerce")
     df["snapshot_time_utc"] = ts.dt.floor("min")
     df = df.dropna(subset=["snapshot_time_utc"])
 
     df = df.drop_duplicates(subset=["market_id", "snapshot_time_utc"], keep="last")
     df = df.sort_values(["snapshot_time_utc", "market_id"])
-
-    # CSV에 문자열로 저장(다음 실행에서도 안정적)
     df["snapshot_time_utc"] = df["snapshot_time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     df.to_csv(path, index=False)
 
@@ -161,7 +159,7 @@ def build_snapshot(watchlist: pd.DataFrame, run_id: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run_once(dynamic_stock_n: int, dynamic_crypto_n: int) -> None:
+def run_once(dynamic_stock_n: int, dynamic_crypto_n: int, lookback_minutes: int) -> None:
     run_id = str(uuid.uuid4())[:8]
     watchlist = load_or_refresh_watchlist(dynamic_stock_n=dynamic_stock_n, dynamic_crypto_n=dynamic_crypto_n)
     if watchlist.empty:
@@ -184,9 +182,10 @@ def main() -> None:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--lookback-minutes", type=int, default=12)
     args = parser.parse_args()
+# 2) main()에서 lookback 전달
 
     if args.once:
-        run_once(args.dynamic_stock_n, args.dynamic_crypto_n)
+        run_once(args.dynamic_stock_n, args.dynamic_crypto_n, args.lookback_minutes)
         return
 
     while True:
