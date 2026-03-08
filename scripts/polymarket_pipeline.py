@@ -27,12 +27,18 @@ def append_csv(path: Path, df: pd.DataFrame) -> None:
         old = pd.read_csv(path)
         df = pd.concat([old, df], ignore_index=True)
 
-    # minute 단위 정규화 + 중복 제거
-    df["snapshot_time_utc"] = pd.to_datetime(df["snapshot_time_utc"], utc=True).dt.floor("min")
+    # mixed ISO8601 안전 파싱
+    ts = pd.to_datetime(df["snapshot_time_utc"], utc=True, format="mixed", errors="coerce")
+    df["snapshot_time_utc"] = ts.dt.floor("min")
+    df = df.dropna(subset=["snapshot_time_utc"])
+
     df = df.drop_duplicates(subset=["market_id", "snapshot_time_utc"], keep="last")
     df = df.sort_values(["snapshot_time_utc", "market_id"])
 
+    # CSV에 문자열로 저장(다음 실행에서도 안정적)
+    df["snapshot_time_utc"] = df["snapshot_time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     df.to_csv(path, index=False)
+
 
 
 
